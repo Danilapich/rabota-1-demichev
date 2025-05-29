@@ -1,0 +1,147 @@
+# Практическая работа №3: Система электронного голосования (MVC)
+import os
+import json
+import time
+from datetime import datetime
+from pathlib import Path
+
+# === Model ===
+class ElectionModel:
+    def __init__(self):
+        self.users = []  # [{'login': '', 'password': '', 'role': ''}]
+        self.elections = []  # [{'name': '', 'end_date': 'YYYY-MM-DD', 'candidates': [], 'votes': {}}]
+
+    def load_data(self, path="data.json"):
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                data = json.load(f)
+                self.users = data.get("users", [])
+                self.elections = data.get("elections", [])
+
+    def save_data(self, path="data.json"):
+        with open(path, "w") as f:
+            json.dump({"users": self.users, "elections": self.elections}, f, indent=4)
+
+    def find_user(self, login):
+        for user in self.users:
+            if user["login"] == login:
+                return user
+        return None
+
+# === View ===
+class ElectionView:
+    def input_text(self, prompt):
+        return input(prompt)
+
+    def show_message(self, msg):
+        print(msg)
+
+    def choose_path(self):
+        path = input("Введите путь для сохранения файла или нажмите Enter для сохранения по умолчанию: ")
+        return path if path else os.getcwd()
+
+# === Controller ===
+class ElectionController:
+    def __init__(self, model, view):
+        self.model = model
+        self.view = view
+        self.current_user = None
+
+    def login(self):
+        login = self.view.input_text("Логин: ")
+        password = self.view.input_text("Пароль: ")
+        user = self.model.find_user(login)
+        if user and user["password"] == password:
+            self.current_user = user
+            self.view.show_message(f"Добро пожаловать, {user['role']}")
+            self.menu()
+        else:
+            self.view.show_message("Неверный логин или пароль")
+
+    def menu(self):
+        role = self.current_user["role"]
+        if role == "Администратор":
+            self.admin_menu()
+        elif role == "ЦИК":
+            self.cik_menu()
+        elif role == "Кандидат":
+            self.candidate_menu()
+
+    def admin_menu(self):
+        while True:
+            choice = self.view.input_text("1. Список пользователей\n2. Удалить пользователя\n3. Список ЦИК\n4. Удалить ЦИК\n5. Создать ЦИК\n6. Список кандидатов\n7. Удалить кандидата\n0. Выход\nВыбор: ")
+            if choice == "1":
+                self.view.show_message(str([u for u in self.model.users]))
+            elif choice == "2":
+                login = self.view.input_text("Логин для удаления: ")
+                self.model.users = [u for u in self.model.users if u["login"] != login]
+                self.model.save_data()
+            elif choice == "3":
+                self.view.show_message(str([u for u in self.model.users if u["role"] == "ЦИК"]))
+            elif choice == "4":
+                login = self.view.input_text("ЦИК логин для удаления: ")
+                self.model.users = [u for u in self.model.users if u["login"] != login or u["role"] != "ЦИК"]
+                self.model.save_data()
+            elif choice == "5":
+                login = self.view.input_text("Новый логин ЦИК: ")
+                password = self.view.input_text("Пароль: ")
+                self.model.users.append({"login": login, "password": password, "role": "ЦИК"})
+                self.model.save_data()
+            elif choice == "6":
+                self.view.show_message(str([u for u in self.model.users if u["role"] == "Кандидат"]))
+            elif choice == "7":
+                login = self.view.input_text("Кандидат логин для удаления: ")
+                self.model.users = [u for u in self.model.users if u["login"] != login or u["role"] != "Кандидат"]
+                self.model.save_data()
+            elif choice == "0":
+                break
+
+    def cik_menu(self):
+        while True:
+            choice = self.view.input_text("1. Создать голосование\n2. Добавить кандидата\n3. Печать результатов\n4. Группировка\n5. Сортировка\n0. Выход\nВыбор: ")
+            if choice == "1":
+                name = self.view.input_text("Название голосования: ")
+                end_date = self.view.input_text("Дата окончания (YYYY-MM-DD): ")
+                self.model.elections.append({"name": name, "end_date": end_date, "candidates": [], "votes": {}})
+                self.model.save_data()
+            elif choice == "2":
+                login = self.view.input_text("Логин кандидата: ")
+                password = self.view.input_text("Пароль: ")
+                self.model.users.append({"login": login, "password": password, "role": "Кандидат"})
+                self.model.save_data()
+            elif choice == "3":
+                self.export_results()
+            elif choice == "0":
+                break
+
+    def candidate_menu(self):
+        self.view.show_message("1. Заполнить информацию\n2. Посмотреть предыдущие результаты\n3. Участие в голосованиях")
+        # Реализация аналогично — при необходимости добавим
+
+    def export_results(self):
+        elections = self.model.elections
+        multiple = self.view.input_text("Выгрузить все голосования? (да/нет): ").lower() == "да"
+        if multiple:
+            mode = self.view.input_text("Объединить в один файл? (да/нет): ").lower()
+            folder = self.view.choose_path()
+            if mode == "да":
+                filename = self.view.input_text("Имя файла (Enter для метки времени): ") or str(int(time.time()))
+                full_path = os.path.join(folder, filename + ".txt")
+                with open(full_path, "w") as f:
+                    for e in elections:
+                        f.write(json.dumps(e, indent=2) + "\n\n")
+            else:
+                for e in elections:
+                    fname = f"{e['name'].replace(' ', '_')}_{int(time.time())}.txt"
+                    full_path = os.path.join(folder, fname)
+                    with open(full_path, "w") as f:
+                        f.write(json.dumps(e, indent=2))
+            self.view.show_message("Результаты сохранены.")
+
+# === Запуск ===
+if __name__ == "__main__":
+    model = ElectionModel()
+    model.load_data()
+    view = ElectionView()
+    controller = ElectionController(model, view)
+    controller.login()
