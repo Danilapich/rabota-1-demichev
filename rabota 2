@@ -1,0 +1,71 @@
+# Практическая работа №2: Расчёт уравнений с поддержкой log, exp, факториала и скобок (MVC)
+import math
+import re
+
+# === Model ===
+class EquationModel:
+    def __init__(self):
+        self.expression = ""
+
+    def set_expression(self, expression):
+        self.expression = expression
+
+    def _check_brackets(self):
+        return self.expression.count('(') == self.expression.count(')')
+
+    def _safe_expression(self, expr):
+        # Замены математических символов на Python-совместимые
+        expr = expr.replace("^", "**").replace("Λ", "**")
+        expr = re.sub(r'log\(([^\)]+)\)', r'(math.log2(\1))', expr)
+        expr = re.sub(r'exp\(([^\)]+)\)', r'(math.exp(\1))', expr)
+        expr = re.sub(r'([\d\)]+)!', r'math.factorial(\1)', expr)
+        return expr
+
+    def calculate(self):
+        try:
+            if not self._check_brackets():
+                raise ValueError("Несоответствие количества открывающих и закрывающих скобок")
+            # Проверка начального и конечного символов
+            if not self.expression or not re.match(r'[\d\(\-]', self.expression[0]) or not re.match(r'[\d\)]', self.expression[-1]):
+                raise ValueError("Уравнение должно начинаться и заканчиваться числом или скобкой")
+
+            expr = self._safe_expression(self.expression)
+            result = eval(expr)
+            return result
+        except Exception as e:
+            return f"Ошибка вычисления: {str(e)}"
+
+# === View ===
+class EquationView:
+    def show_input_prompt(self):
+        return input("Введите уравнение: ")
+
+    def show_result(self, result):
+        print(f"Результат: {result}")
+
+    def show_error(self, message):
+        print(f"Ошибка: {message}")
+
+# === Controller ===
+class EquationController:
+    def __init__(self, model, view):
+        self.model = model
+        self.view = view
+
+    def run(self):
+        expr = self.view.show_input_prompt()
+        # Проверка количества операций (слагаемых)
+        op_count = len(re.findall(r'[\+\-\*/^Λ]', expr))
+        if op_count > 15:
+            self.view.show_error("Превышено количество операций (макс. 15)")
+            return
+        self.model.set_expression(expr)
+        result = self.model.calculate()
+        self.view.show_result(result)
+
+# === Запуск программы ===
+if __name__ == "__main__":
+    model = EquationModel()
+    view = EquationView()
+    controller = EquationController(model, view)
+    controller.run()
